@@ -4,3 +4,4 @@ oneadmin ALL=(root)     NOPASSWD:/sbin/lvs
 #oneadmin ALL=(root)     NOPASSWD:/bin/dd
 oneadmin ALL=(root)     NOPASSWD:/bin/echo
 
+If on CentOS, DISABLE requiretty
