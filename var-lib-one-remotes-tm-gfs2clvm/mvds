@@ -1,0 +1,78 @@
+#!/bin/bash
+
+# -------------------------------------------------------------------------- #
+# Copyright 2002-2012, OpenNebula Project Leads (OpenNebula.org)             #
+#                                                                            #
+# Licensed under the Apache License, Version 2.0 (the "License"); you may    #
+# not use this file except in compliance with the License. You may obtain    #
+# a copy of the License at                                                   #
+#                                                                            #
+# http://www.apache.org/licenses/LICENSE-2.0                                 #
+#                                                                            #
+# Unless required by applicable law or agreed to in writing, software        #
+# distributed under the License is distributed on an "AS IS" BASIS,          #
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.   #
+# See the License for the specific language governing permissions and        #
+# limitations under the License.                                             #
+#--------------------------------------------------------------------------- #
+
+#------------------------------------------------------------------------------
+#Preparing Environment
+#------------------------------------------------------------------------------
+SRC=$1
+DST=$2
+
+if [ -z "${ONE_LOCATION}" ]; then
+    TMCOMMON=/var/lib/one/remotes/tm/tm_common.sh
+    LVMRC=/etc/one/tm/gfs2clvmrc
+else
+    TMCOMMON=$ONE_LOCATION/remotes/tm/tm_common.sh
+    LVMRC=$ONE_LOCATION/etc/tm/gfs2clvmrc
+fi
+
+. $TMCOMMON
+. $LVMRC
+
+SRC_PATH=`arg_path $SRC`
+DST_PATH=`arg_path $DST`
+
+SRC_HOST=`arg_host $SRC`
+DST_HOST=`arg_host $DST`
+
+
+#------------------------------------------------------------------------------
+#Determine VG, Source, and Destination volume names
+#------------------------------------------------------------------------------
+
+VIRTUALID=$(echo $SRC_PATH | cut -f7 -d"/")
+SRCIMAGEID=$(onevm show ${VIRTUALID} | grep IMAGE_ID | cut -f2 -d'"') 
+VG_NAME=$(onevm show ${VIRTUALID} | grep "DATASTORE=" | cut -f2 -d'"')
+DSTHASH=$(onevm show ${VIRTUALID} | grep SAVE_AS_SOURCE | cut -f7 -d"/" | cut -f1 -d'"')
+DSTLV_NAME=lv-oneimg-$DSTHASH
+SRCHASH=$(echo -n $SRC_PATH | md5sum | awk '{print $1}')
+SRCLV_NAME=lv-one-$VIRTUALID-$SRCHASH
+PERSIST=$(oneimage show ${SRCIMAGEID} | grep PERSISTENT | awk '{print $3}')
+
+#------------------------------------------------------------------------------
+#Determine Persistence and skip copy back to datastore
+#------------------------------------------------------------------------------
+
+if [ $PERSIST == "Yes" ]; then
+	log "Persistent image found.  Already exists in datastore."
+	exit 0
+else
+	log "Non-Persistent image found.  Will begin transfer to datastore."
+fi
+
+#------------------------------------------------------------------------------
+#Saving Non-Persistent disk image back to datastore
+#------------------------------------------------------------------------------
+
+log "Dumping Image"
+exec_and_log "eval $SSH $SRC_HOST $DD if=/dev/$VG_NAME/$SRCLV_NAME of=/dev/$VG_NAME/$DSTLV_NAME"
+
+#------------------------------------------------------------------------------
+#Removing Source LV (due to bug in delete script call)
+#------------------------------------------------------------------------------
+log "Removing LV"
+exec_and_log "eval $SSH $SRC_HOST $SUDO lvremove -f $VG_NAME/$SRCLV_NAME"

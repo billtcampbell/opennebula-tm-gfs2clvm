@@ -16,32 +16,35 @@
 # limitations under the License.                                             #
 #--------------------------------------------------------------------------- #
 
-###############################################################################
-# This script is used to remove a VM image (SRC) from the image repository 
-###############################################################################
-
-# ------------ Set up the environment to source common tools ------------ 
+#------------------------------------------------------------------------------
+#Preparing Environment
+#------------------------------------------------------------------------------
+SIZE=$1
+DST=$2
 
 if [ -z "${ONE_LOCATION}" ]; then
-    LIB_LOCATION=/usr/lib/one
+    TMCOMMON=/var/lib/one/remotes/tm/tm_common.sh
 else
-    LIB_LOCATION=$ONE_LOCATION/lib
+    TMCOMMON=$ONE_LOCATION/remotes/tm/tm_common.sh
 fi
 
-. $LIB_LOCATION/sh/scripts_common.sh
-source $(dirname $0)/fsrc
+. $TMCOMMON
+MKSWAP=/sbin/mkswap
 
-# include file with VG_NAME definition
-source $ETC_LOCATION/tm_gfs2clvm/tm_gfs2clvmrc
+DST_PATH=`arg_path $DST`
+DST_HOST=`arg_host $DST`
 
-# ------------ Remove the image to the repository ------------ 
+DST_DIR=`dirname $DST_PATH`
 
-SRC=$1
-SRC_BASENAME=$( basename "$SRC" )
+#------------------------------------------------------------------------------
+#Executing image creation
+#------------------------------------------------------------------------------
+log "Creating ${SIZE}Mb image in $DST_PATH"
+exec_and_log "$SSH $DST_HOST mkdir -p $DST_DIR"
+exec_and_log "$SSH $DST_HOST $DD if=/dev/zero of=$DST_PATH bs=1 count=1 seek=${SIZE}M"
 
-hostname=$(onehost list -l NAME,STAT | grep 'on$' | head -n 1 | awk '{print $1}')
-log "hostname: $hosname"
+log "Initializing swap space"
+exec_and_log "$SSH $DST_HOST $MKSWAP $DST_PATH"
 
-exec_and_log "ssh $hostname sudo lvremove -f ${VG_NAME}/lv-oneimg-${SRC_BASENAME}" \
-    "Error deleting ${VG_NAME}/lv-oneimg-${SRC_BASENAME}"
+exec_and_log "$SSH $DST_HOST chmod a+w $DST_PATH"
 

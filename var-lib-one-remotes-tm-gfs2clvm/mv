@@ -16,15 +16,18 @@
 # limitations under the License.                                             #
 #--------------------------------------------------------------------------- #
 
+#------------------------------------------------------------------------------
+#Preparing Environment
+#------------------------------------------------------------------------------
 SRC=$1
 DST=$2
 
 if [ -z "${ONE_LOCATION}" ]; then
-    TMCOMMON=/usr/lib/one/mads/tm_common.sh
-    LVMRC=/etc/one/tm_gfs2clvm/tm_gfs2clvmrc
+    TMCOMMON=/var/lib/one/remotes/tm/tm_common.sh
+    LVMRC=/etc/one/tm/gfs2clvmrc
 else
-    TMCOMMON=$ONE_LOCATION/lib/mads/tm_common.sh
-    LVMRC=$ONE_LOCATION/etc/tm_gfs2clvm/tm_gfs2clvmrc
+    TMCOMMON=$ONE_LOCATION/remotes/tm/tm_common.sh
+    LVMRC=$ONE_LOCATION/etc/tm/gfs2clvmrc
 fi
 
 . $TMCOMMON
@@ -39,6 +42,10 @@ DST_HOST=`arg_host $DST`
 DST_DIR=`dirname $DST_PATH`
 
 VID=`get_vid $SRC_PATH`
+
+#------------------------------------------------------------------------------
+#Executing move
+#------------------------------------------------------------------------------
 
 if [ -z $SIZE ] ; then
     SIZE=$DEFAULT_LV_SIZE
