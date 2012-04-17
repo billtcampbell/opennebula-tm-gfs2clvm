@@ -8,8 +8,11 @@ This is a fork of Jan Horacek's excellent "gfs2clvm" TM driver for OpenNebula.  
 that caused his driver to no longer function.  This fork restores functionality, along with the following enhancements:
 
 * Multiple Datastore/Volume Group Support
+	
 	-- Allows the creation of multiple Volume Groups and Datastores, so images can be segmented accordingly, or to match whatever storage configuration 		   is needed
+
 	-- Volume Groups can be named any name (no longer need the vg_ prefix).  This is a udev parameter.
+
 	-- CONFIGURATION ITEM: When creating Volume Groups/Datastores, ensure they are named IDENTICALLY.
 
 * Image conversion handled differently
