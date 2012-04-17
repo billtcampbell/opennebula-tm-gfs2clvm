@@ -16,12 +16,15 @@ that caused his driver to no longer function.  This fork restores functionality,
 	-- CONFIGURATION ITEM: When creating Volume Groups/Datastores, ensure they are named IDENTICALLY.
 
 * Image conversion handled differently
+
 	-- Jan's driver did a raw conversion using the 'dd' utility.  This updated driver uses 'qemu-img convert -O host_device' to copy source images to 		   logical volumes.  This allows the GFS2 image store to hold smaller qcow2/vmdk/vdi images (basically any image qemu-img supports converting), and 		   enables additional functionality (see next item).
 
 * Image upload from Sunstone
+
 	-- One of the new features of OpenNebula 3.4 is the ability to upload images directly from any client machine through the web interface.  The 		   driver has been modified to take advantage of this functionality.
 
 * Datastore creation in Sunstone
+
 	-- You can create a GFS2CLVM and select the GFS2CLVM driver when creating a datastore in Sunstone
 
 
@@ -30,11 +33,15 @@ that caused his driver to no longer function.  This fork restores functionality,
 Installation is the same as Jan's below, putting the appropriate files into the appropriate directories as labeled.  Be sure to run the following if running on a CentOS/RHEL based system:
 
 * disabled dynamic ownership
+
     sed -i -e 's,^#dynamic_ownership = 1,dynamic_ownership = 0,' /etc/libvirt/qemu.conf
 
 * virtual machines running by oneadmin/oneadmin, not root or other user
+
     sed -i -e 's,^#user = "root",user = "oneadmin",' /etc/libvirt/qemu.conf
+
     sed -i -e 's,^#group = "root",group = "oneadmin",' /etc/libvirt/qemu.conf
+
 
 ## CURRENT STATE
 
@@ -42,7 +49,10 @@ The following functions and their status have been tested on CentOS 6.2 x64, and
 
 * instantiate			OK
 * resubmit 			OK
-* reboot 			NOT TESTED (Getting JSON error when attempting to reboot, possibly my QEMU/Testing environment? CentOS 6.2)
+* reboot 			NOT TESTED 
+
+	(Getting JSON error when attempting to reboot, possibly my QEMU/Testing environment? CentOS 6.2)
+
 * livemigrate 			OK
 * suspend 			OK
 * migrate 			OK
@@ -50,7 +60,10 @@ The following functions and their status have been tested on CentOS 6.2 x64, and
 * resume 			OK
 * cancel 			OK
 * shutdown 			OK
-* delete 			OK (will not remove some LVs when multiple images are selected to be deleted at once.  Looking into this, but for now, 					    delete one at a time seems to work ok)
+* delete 			OK 
+
+	(will not remove some LVs when multiple images are selected to be deleted at once.  Looking into this, but for now, delete one at a time seems to work ok)
+
 * saveas + shutdown 		OK (custom remotes)
 * snapshot suspended machine 	NOT TESTED
 * import ttylinux from file 	NOT TESTED
