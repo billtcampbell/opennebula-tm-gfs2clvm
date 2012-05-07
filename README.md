@@ -7,7 +7,7 @@ Contact: bill.t.campbell@gmail.com
 This is a fork of Jan Horacek's excellent "gfs2clvm" TM driver for OpenNebula.  With the release of OpenNebula 3.4, additional capability was presented
 that caused his driver to no longer function.  This fork restores functionality, along with the following enhancements:
 
-* Multiple Datastore/Volume Group Support
+* Multiple Datastore/Cluster/Volume Group Support
 	
 	-- Allows the creation of multiple Volume Groups and Datastores, so images can be segmented accordingly, or to match whatever storage configuration 		   is needed
 
@@ -21,14 +21,45 @@ that caused his driver to no longer function.  This fork restores functionality,
 
 * Image upload from Sunstone
 
-	-- One of the new features of OpenNebula 3.4 is the ability to upload images directly from any client machine through the web interface.  The 		   driver has been modified to take advantage of this functionality.
+	-- One of the new features of OpenNebula 3.4 is the ability to upload images directly from any client machine through the web interface.  The 		   driver has been modified to take advantage of this functionality.  Be sure that the OpenNebula frontend has enough space to temporarily hold the image file that's being uploaded (hence the idea of using smaller base images like qcow2, vdi, etc.)
 
 * Datastore creation in Sunstone
 
 	-- You can create a GFS2CLVM and select the GFS2CLVM driver when creating a datastore in Sunstone
 
+* Installation Scripts
+
+	-- Quick installation scripts for both the OpenNebula front-end and hypervisors (currently only CentOS/RHEL 6.x, will look into developing for Ubuntu/Debian derivatives if time permits)
+
+* Persistent/Non-Persistent snapshots of suspended virtual machine disks
+
+	-- In previous logic, it was possible to create a copy of a running virtual machine.  Without proper snapshot/protection mechanisms, this can be dangerous.  Added some logic to determine state of the virtual machine prior to copy and will error if virtual machine is running.
+	
+	-- Can create the clone of the suspended VM disk in any configured GFS2CLVM datastore.
+	
+	-- As such, the 'lvm://{VMID}/{DISKID}' path directive when creating an image has been changed to 'snapshot://{VMID}/{DISKID}' to be more descriptive with the source action.
+
+* Clone of existing image in datastore
+
+	-- This has been modified to allow clone of image from one datastore to another datastore (volume group)
+	
+	-- Additional logic was added to check if a persistent image is currently in use and the VM is running.
+	
+	-- As such, the 'vol://{IMAGEID}' path directive when cloning an image has been changed to 'image://{IMAGEID}' to be more descriptive with the source action.	 
+
 
 ## INSTALLATION
+
+You can install the driver for both the hypervisor and front-end by running the included installation scripts.  
+
+---Prerequisites for Front-End:  OpenNebula installed and initially configured
+
+---Prerequisites for Hypervisors:  Hypervisor (KVM) and Libvirt installed
+
+* It's probably not a bad idea to restart services or reboot each machine after installation to ensure proper configurations are in place (particularly the Hypervisor hosts)
+
+
+## MANUAL INSTALLATION
 
 Installation is the same as Jan's below, putting the appropriate files into the appropriate directories as labeled.  Be sure to run the following if running on a CentOS/RHEL based system:
 
@@ -45,31 +76,32 @@ Installation is the same as Jan's below, putting the appropriate files into the 
 
 ## CURRENT STATE
 
-The following functions and their status have been tested on CentOS 6.2 x64, and any bugs/quirks noted:
+The following functions and their status have been tested on CentOS 6.2 x64, using KVM as the hypervisor, and any bugs/quirks noted:
 
-* instantiate			OK
-* resubmit 			OK
-* reboot 			NOT TESTED 
+* Instantiate									OK
+* Resubmit							 			OK
+* Restart										OK
+* Reboot										NOT TESTED 
 
 	(Getting JSON error when attempting to reboot, possibly my QEMU/Testing environment? CentOS 6.2)
 
-* livemigrate 			OK
-* suspend 			OK
-* migrate 			OK
-* stop 				OK
-* resume 			OK
-* cancel 			OK
-* shutdown 			OK
-* delete 			OK 
-
-	(will not remove some LVs when multiple images are selected to be deleted at once.  Looking into this, but for now, delete one at a time seems to work ok)
-
-* saveas + shutdown 		OK (custom remotes)
-* snapshot suspended machine 	NOT TESTED
-* import ttylinux from file 	NOT TESTED
-* create new datablock volume 	OK
-* persistence 			OK
-* new OS image from other img 	NOT TESTED
+* LiveMigrate						 			OK
+* Suspend							 			OK
+* Migrate							 			OK
+* Stop							 				OK
+* Resume							 			OK
+* Cancel							 			OK
+* Delete							 			OK 
+* SaveAs								 		OK
+* Shutdown										OK
+* Snapshot non-persistent Suspended machine		OK
+* Snapshot persistent Suspended machine			OK
+* Snapshot non-persistent Running machine		OK
+* Snapshot persistent Running machine			OK
+* Import ttylinux from file 					NOT TESTED
+* Create new Datablock volume 					OK
+* Persistence 									OK
+* Clone existing image						 	OK
 
 -- The only real configuration item to remember that differs from Jan's original documentation is the ensure the volume groups and datastores are named identically.  The scripts use the datastore name as the volume group name.
 
@@ -77,11 +109,7 @@ The following functions and their status have been tested on CentOS 6.2 x64, and
 I'm definitely not perfect, so some (or all) parts of this could be buggy/messy, but testing so far has been very positive.  I welcome all suggestions/modifications/etc.
 
 ## JAN'S ORIGINAL DOCUMENTATION BELOW
-##
-##
-##
-##
-##
+
 
 "gfs2clvm" Transfer Manager Driver for OpenNebula
 
