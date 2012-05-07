@@ -16,6 +16,10 @@
 # limitations under the License.                                             #
 #--------------------------------------------------------------------------- #
 
+###############################################################################
+# Prepare Environment
+###############################################################################
+
 SRC=$1
 DST=$2
 
@@ -33,17 +37,21 @@ fi
 SRC_PATH=`arg_path $SRC`
 SRC_HOST=`arg_host $SRC`
 
-#------------------------------------------------------------------------------
-#Determine Volume Group/LV Names by Datastore ID/Name
-#------------------------------------------------------------------------------
+
+###############################################################################
+# Determine Volume Group/LV Names by Datastore ID/Name
+###############################################################################
+
 VIRTUALID=$(echo $SRC_PATH | cut -f7 -d"/")
 VG_NAME=$(onevm show ${VIRTUALID} | grep "DATASTORE=" | cut -f2 -d'"')
 SRCHASH=$(echo -n $SRC_PATH | md5sum | awk '{print $1}')
 LV_NAME=lv-one-$VIRTUALID-$SRCHASH
 
-#------------------------------------------------------------------------------
-#Executing delete action on Logical Volume(s)
-#------------------------------------------------------------------------------
+
+###############################################################################
+# Executing Delete action on Logical Volume(s)
+###############################################################################
+
 log "Deleting remote LVs"
 LVS=$($SSH $SRC_HOST $SUDO $LVS --noheadings -o lv_name $VG_NAME | grep $LV_NAME)
 for lv in $LVS

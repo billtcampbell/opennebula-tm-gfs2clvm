@@ -16,9 +16,10 @@
 # limitations under the License.                                             #
 #--------------------------------------------------------------------------- #
 
-#------------------------------------------------------------------------------
-#Preparing Environment
-#------------------------------------------------------------------------------
+###############################################################################
+# Preparing Environment
+###############################################################################
+
 SRC=$1
 DST=$2
 
@@ -40,9 +41,9 @@ SRC_HOST=`arg_host $SRC`
 DST_HOST=`arg_host $DST`
 
 
-#------------------------------------------------------------------------------
-#Determine VG, Source, and Destination volume names
-#------------------------------------------------------------------------------
+###############################################################################
+# Determine VG, Source, and Destination Volume names
+###############################################################################
 
 VIRTUALID=$(echo $SRC_PATH | cut -f7 -d"/")
 SRCIMAGEID=$(onevm show ${VIRTUALID} | grep IMAGE_ID | cut -f2 -d'"') 
@@ -53,9 +54,10 @@ SRCHASH=$(echo -n $SRC_PATH | md5sum | awk '{print $1}')
 SRCLV_NAME=lv-one-$VIRTUALID-$SRCHASH
 PERSIST=$(oneimage show ${SRCIMAGEID} | grep PERSISTENT | awk '{print $3}')
 
-#------------------------------------------------------------------------------
-#Determine Persistence and skip copy back to datastore
-#------------------------------------------------------------------------------
+
+###############################################################################
+# Determine Persistence and skip copy back to the Datastore
+###############################################################################
 
 if [ $PERSIST == "Yes" ]; then
 	log "Persistent image found.  Already exists in datastore."
@@ -64,15 +66,18 @@ else
 	log "Non-Persistent image found.  Will begin transfer to datastore."
 fi
 
-#------------------------------------------------------------------------------
-#Saving Non-Persistent disk image back to datastore
-#------------------------------------------------------------------------------
+
+###############################################################################
+# Save Non-Persistent disk image back to Datastore
+###############################################################################
 
 log "Dumping Image"
-exec_and_log "eval $SSH $SRC_HOST $DD if=/dev/$VG_NAME/$SRCLV_NAME of=/dev/$VG_NAME/$DSTLV_NAME"
+exec_and_log "eval $SSH $SRC_HOST $DD if=/dev/$VG_NAME/$SRCLV_NAME of=/dev/$VG_NAME/$DSTLV_NAME bs=32M"
 
-#------------------------------------------------------------------------------
-#Removing Source LV (due to bug in delete script call)
-#------------------------------------------------------------------------------
+
+###############################################################################
+# Remove Source LV (due to bug in Delete script call)
+###############################################################################
+
 log "Removing LV"
 exec_and_log "eval $SSH $SRC_HOST $SUDO lvremove -f $VG_NAME/$SRCLV_NAME"

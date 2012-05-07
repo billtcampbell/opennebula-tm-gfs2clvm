@@ -21,7 +21,9 @@
 # Several SRC types are supported
 ###############################################################################
 
-# -------- Set up the environment to source common tools & conf ------------ 
+###############################################################################
+#Prepare Environment
+###############################################################################
 
 if [ -z "${ONE_LOCATION}" ]; then
     LIB_LOCATION=/usr/lib/one
@@ -43,8 +45,9 @@ source ${DRIVER_PATH}/../libfs.sh
 . /etc/one/tm/gfs2clvmrc
 
 
-
-# -------- Get cp and datastore arguments from OpenNebula core ------------
+###############################################################################
+# Get 'CP' and Datastore arguments from OpenNebula core
+###############################################################################
 
 DRV_ACTION=$1
 ID=$2
@@ -74,99 +77,129 @@ DST=`generate_image_path`
 DST_BASENAME=$( basename "$DST" )
 SRC_PATH=`arg_path $SRC`
 
-# ------------ Determine Volume Group Name by Datastore ID/Name ------------
+###############################################################################
+# Determine Volume Group Name by Datastore ID/Name
+###############################################################################
 
 DSID=$(echo $BASE_PATH | cut -f6 -d"/")
 VG_NAME=$(onedatastore show ${DSID} | grep NAME | awk '{print $3}')
+CLUSTER=$(onedatastore show ${DSID} | grep CLUSTER | awk '{print $3}')
 
-# ------------ Copy the image to the repository ------------- 
+###############################################################################
+# Copy Operations
+###############################################################################
 
 case $SRC in
-http://*)
 
-    exec_and_log "$WGET -O $DST $SRC" \
-        "Error downloading $SRC"
 
-    ;;
-
-vmware://*)
-    SRC=`echo $SRC|sed  's/vmware:\/\///g'`
-
-    if [ `check_restricted $SRC` -eq 1 ]; then
-        log_error "Not allowed to copy images from $RESTRICTED_DIRS"
-        error_message "Not allowed to copy image file $SRC"
-        exit -1
-    fi
-
-    log "Copying local disk folder $SRC to the image repository"
-
-    exec_and_log "cp -rf $SRC $DST" \
-        "Error copying $SRC to $DST"
-
-    if [ ! -f $DST/disk.vmdk ]; then
-        BASE_DISK_FILE=`ls $DST | grep -v '.*-s[0-9]*\.vmdk'`
-
-        exec_and_log "mv -f $DST/$BASE_DISK_FILE $DST/disk.vmdk" \
-            "Error renaming disk file $BASE_DISK_FILE to disk.vmdk"
-    fi
-
-    exec_and_log "chmod 0770 $DST"
-    ;;
-
-lvm://*)
-    #
-    # copy of existing machine could be created
-    # by using lvm://{{VMID}}/{{DISKID}}
-    #
-    vmid_diskid_pair=$( echo "$SRC" | sed 's,lvm://,,')
+##### Snapshot of existing virtual instance disk (persistent and non-persistent)
+#
+snapshot://*)
+	
+    ##Prepare environment for copy
+    vmid_diskid_pair=$( echo "$SRC" | sed 's,snapshot://,,')
     vmid=$( echo "$vmid_diskid_pair" | cut -d "/" -f 1 )
     diskid=$( echo "$vmid_diskid_pair" | cut -d "/" -f 2 )
-    src_volume_mapper_path=/dev/mapper/${VG_NAME}-lv--one--${vmid}--${diskid}
-    src_volume=lv-one-${vmid}-${diskid}
+    SRCHDISKID=$(echo '"'$diskid'"')
+    IMAGEID=$(onevm show $vmid | grep -A 8 DISK_ID=$searchdiskid | grep IMAGE_ID | cut -f2 -d'"')
+    IMAGEHASH=$(oneimage show $IMAGEID | grep SOURCE | cut -f7 -d"/")
+    PERSISTENT=$(onevm show $vmid | grep -A 8 DISK_ID=$searchdiskid | grep PERSISTENT | cut -f2 -d'"')
+    VM_STATE=$(onevm show $vmid | grep LCM_STATE | awk '{print $3}')
+    HOSTID=$(onehost list -l ID,NAME,STAT,CLUSTER | grep ${CLUSTER} | grep on | head -n 1 | awk '{print $1}')
+    hostname=$(onehost show ${HOSTID} | grep HOSTNAME | cut -f2 -d'"')
+    	log "hostname: $hostname"
     
-    hostname=$(onehost list -l NAME,STAT | grep 'on$' | head -n 1 | awk '{print $1}')
-    log "hostname: $hostname"
-    #exec_and_log "ssh $hostname dd if=${src_volume_mapper_path} of=$DST" \
-    #    "Error copying ${src_volume_mapper_path} to $DST"
+    ## Determine if VM is running
+    if [ $VM_STATE = RUNNING ];
+    then
+	log "ERROR: Cannot create snapshot of disk attached to running VM"
+	exit 1
+    else
+	log "VM is not in Running state.  Continuing...."
+    fi
 
-    # $SSH $DST_HOST $SUDO $LVCREATE
-    src_volume_size=$(set -x ; ssh $hostname sudo /sbin/lvs --noheadings --units m | grep $src_volume 2>/dev/null | ( read lv vg states size ; echo $size) )
-    SIZE=${src_volume_size/M/}
-    log "size: $SIZE"
-    exec_and_log "ssh $hostname sudo lvcreate -L ${SIZE}M -n lv-oneimg-${DST_BASENAME} ${VG_NAME}" \
-        "Error creating LV ${VG_NAME}/lv-oneimg-${DST_BASENAME}"
-    exec_and_log "ssh $hostname dd if=/var/lib/one/${vmid}/images/disk.${diskid} of=/dev/${VG_NAME}/lv-oneimg-${DST_BASENAME}" \
-        "Error copying /var/lib/one/${vmid}/images/disk.${diskid} to $DST_BASENAME"
-    ;;
+    ## Create snapshot copy of existing machine disk
+    if [ $PERSISTENT = YES ];
+    then
+	SRC_DS=$(oneimage show "$IMAGEID" | grep DATASTORE | awk '{print $3}')
+	src_volume_mapper_path=/dev/mapper/${SRC_DS}-lv--oneimg--${IMAGEHASH}
+	src_volume=lv-oneimg-${IMAGEHASH}
+	src_volume_size=$( set -x ; ssh $hostname sudo /sbin/lvs --noheadings --units m | grep $src_volume 2>/dev/null | ( read lv vg states size ; echo $size) )
+    	SIZE=${src_volume_size/M/}
+    	log "size: $SIZE"
+    	exec_and_log "ssh $hostname sudo lvcreate -L ${SIZE}m -n lv-oneimg-${DST_BASENAME} ${VG_NAME}" \
+        	"Error creating LV ${VG_NAME}/lv-oneimg-${DST_BASENAME}"
+    	exec_and_log "ssh $hostname dd if=/var/lib/one/datastores/0/${vmid}/disk.${diskid} of=/dev/${VG_NAME}/lv-oneimg-${DST_BASENAME} bs=32M" \
+        	"Error copying /var/lib/one/${vmid}/images/disk.${diskid} to $DST_BASENAME"
+    else
+    	SRC_DS=$(oneimage show "$IMAGEID" | grep DATASTORE | awk '{print $3}')
+    	SRCHASH=$(echo -n /var/lib/one/datastores/0/$vmid/disk.$diskid | md5sum | awk '{print $1}')
+    	src_volume_mapper_path=/dev/mapper/${SRC_DS}-lv--one--${vmid}-${SRCHASH}
+    	src_volume=lv-one-${vmid}-${SRCHASH}
+    	src_volume_size=$( set -x ; ssh $hostname sudo /sbin/lvs --noheadings --units m | grep $src_volume 2>/dev/null | ( read lv vg states size ; echo $size) )
+    	SIZE=${src_volume_size/M/}
+    	log "size: $SIZE"
+    	exec_and_log "ssh $hostname sudo lvcreate -L ${SIZE}m -n lv-oneimg-${DST_BASENAME} ${VG_NAME}" \
+        	"Error creating LV ${VG_NAME}/lv-oneimg-${DST_BASENAME}"
+    	exec_and_log "ssh $hostname dd if=/var/lib/one/datastores/0/${vmid}/disk.${diskid} of=/dev/${VG_NAME}/lv-oneimg-${DST_BASENAME} bs=32M" \
+        	"Error copying /var/lib/one/${vmid}/images/disk.${diskid} to $DST_BASENAME"
+    fi
+;;
 
-vol://*)
-    #
-    # copy of existing machine could be created
-    # by using lvm://{{VMID}}/{{DISKID}}
-    #
-    vmid_diskid_pair=$( echo "$SRC" | sed 's,vol://,,')
+##### Create a clone/copy of existing image in repository
+#
+image://*)
+
+    ## Prepare environment for copy
+    vmid_diskid_pair=$( echo "$SRC" | sed 's,image://,,')
     diskid=$( echo "$vmid_diskid_pair" )
     diskid_hashed=$( oneimage show "$diskid" | grep SOURCE | sed -e 's,.*/,,')
     log "diskid_hashed: $diskid_hashed"
-    src_volume_mapper_path=/dev/mapper/${VG_NAME}-lv--oneimg--${diskid_hashed}
+    SRC_DS=$( oneimage show "$diskid" | grep DATASTORE | awk '{print $3}' )
+    SRC_DSID=$( oneimage show $diskid | grep SOURCE | cut -f6 -d"/" )
+    src_volume_mapper_path=/dev/mapper/${SRC_DS}-lv--oneimg--${diskid_hashed}
     src_volume=lv-oneimg-${diskid_hashed}
-    
-    hostname=$(onehost list -l NAME,STAT | grep 'on$' | head -n 1 | awk '{print $1}')
+    PERSISTENT=$(oneimage show $diskid | grep PERSISTENT | awk '{print $3}')
+    IMAGESTATE=$(oneimage show $diskid | grep STATE | awk '{print $3}')
+    VMID=$( cat /var/lib/one/datastores/$SRC_DSID/$diskid_hashed.deployed.vmid )
+    VM_STATE=$(onevm show $VMID | grep LCM_STATE | awk '{print $3}')
+    HOSTID=$(onehost list -l ID,NAME,STAT,CLUSTER | grep ${CLUSTER} | grep on | head -n 1 | awk '{print $1}')
+    hostname=$(onehost show ${HOSTID} | grep HOSTNAME | cut -f2 -d'"')
     log "hostname: $hostname"
-    #exec_and_log "ssh $hostname dd if=${src_volume_mapper_path} of=$DST" \
-    #    "Error copying ${src_volume_mapper_path} to $DST"
 
-    # $SSH $DST_HOST $SUDO $LVCREATE
+    ## Determine if persistent image is currently in use
+    if [ $PERSISTENT = Yes ]; then
+	log "Source Image is a persistent image.  Determining if in use..."
+		if [ $IMAGESTATE = used ]; then
+			log "Persistent Image is currently in use.  Determining if virtual instance is in running state..."
+				if [ $VM_STATE = RUNNING ]; then
+					log "ERROR: Cannot create copy of image attached to running VM"
+					exit 1
+				else
+					log "VM is not running"
+				fi
+		else
+			log "Persistent Image is not currently in use"
+		fi
+    else
+	log "Beginning copy..."
+    fi
+
+    ## Create copy of existing image
     src_volume_size=$(set -x ; ssh $hostname sudo /sbin/lvs --noheadings --units m | grep $src_volume 2>/dev/null | ( read lv vg states size ; echo $size) )
     SIZE=${src_volume_size/M/}
     log "size: $SIZE"
     exec_and_log "ssh $hostname sudo lvcreate -L ${SIZE}M -n lv-oneimg-${DST_BASENAME} ${VG_NAME}" \
         "Error creating LV ${VG_NAME}/lv-oneimg-${DST_BASENAME}"
-    exec_and_log "ssh $hostname dd if=${src_volume_mapper_path} of=/dev/${VG_NAME}/lv-oneimg-${DST_BASENAME}" \
+    exec_and_log "ssh $hostname dd if=${src_volume_mapper_path} of=/dev/${VG_NAME}/lv-oneimg-${DST_BASENAME} bs=32M" \
         "Error copying ${src_volume_mapper_path} to $DST_BASENAME"
-    ;;
+;;
 
+##### Copy image from local source on GFS2 volume
+#
 *)
+
+    ## Preparing Environment
     if [ `check_restricted $SRC` -eq 1 ]; then
         log_error "Not allowed to copy images from $RESTRICTED_DIRS"
         error_message "Not allowed to copy image file $SRC"
@@ -174,21 +207,19 @@ vol://*)
     fi
     
     log "Copying image $SRC to the image repository"
-    
-    hostname=$(onehost list -l NAME,STAT | grep 'on$' | head -n 1 | awk '{print $1}')
+
+    HOSTID=$(onehost list -l ID,NAME,STAT,CLUSTER | grep ${CLUSTER} | grep on | head -n 1 | awk '{print $1}')
+    hostname=$(onehost show ${HOSTID} | grep HOSTNAME | cut -f2 -d'"')
     log "hostname: $hostname"
 
-# ----- Determine if uploading from Web interface (to copy to Hypervisor), then import of image to LV -----
-# ------------- Requires a /var/lib/one/uploads directory created on Hypervisors --------------------------
-# ------------- Requires oneadmin in sudoers on frontend, with permission to run cp, chown, chmod ---------
-
+## Determine if uploading from web interface and copy source to destination image
 if [ `echo $SRC | grep -c "/tmp/"` != 0 ]; then
 	NEWSRC=$(echo $SRC | cut -f3 -d"/")
 	exec_and_log "sudo cp $SRC /var/lib/one/"
 	exec_and_log "sudo chown oneadmin:oneadmin /var/lib/one/$NEWSRC"
 	exec_and_log "sudo chmod 0660 /var/lib/one/$NEWSRC"
 	exec_and_log "scp /var/lib/one/$NEWSRC $hostname:/var/lib/one/uploads/"
-	src_volume_size=$(fs_du /var/lib/one/uploads/$NEWSRC $hostname)
+	src_volume_size=$(qemu_size /var/lib/one/uploads/$NEWSRC $hostname)
 	SIZE=${src_volume_size}
 	log "size: $SIZE"
 	exec_and_log "ssh $hostname sudo lvcreate -L ${SIZE}M -n lv-oneimg-${DST_BASENAME} ${VG_NAME}" \
@@ -198,7 +229,7 @@ if [ `echo $SRC | grep -c "/tmp/"` != 0 ]; then
 	exec_and_log "rm -f /var/lib/one/$NEWSRC"
 	exec_and_log "ssh $hostname rm -f /var/lib/one/uploads/$NEWSRC"
 	else
-    src_volume_size=`fs_du $SRC $hostname`
+    src_volume_size=`qemu_size $SRC $hostname`
     SIZE=${src_volume_size}
     log "size: $SIZE"
     exec_and_log "ssh $hostname sudo lvcreate -L ${SIZE}M -n lv-oneimg-${DST_BASENAME} ${VG_NAME}" \
@@ -209,11 +240,9 @@ fi
     ;;
 esac
 
-# ---------------- Get the size of the image & fix perms ------------
-
-
+###############################################################################
+# Get the size of the disk image and fix permissions
+###############################################################################
 
 SIZE=$(ssh $hostname sudo /sbin/lvs --noheadings --units m | grep lv-oneimg-${DST_BASENAME} 2>/dev/null | ( read lv vg states size ; echo $size) )
-
 echo "$DST $SIZE"
-#echo "$DST 16384M"

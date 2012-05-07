@@ -16,9 +16,10 @@
 # limitations under the License.                                             #
 #--------------------------------------------------------------------------- #
 
-#------------------------------------------------------------------------------
-#Prepare Environment
-#------------------------------------------------------------------------------
+###############################################################################
+# Prepare Environment
+###############################################################################
+
 if [ -z "${ONE_LOCATION}" ]; then
     TMCOMMON=/var/lib/one/tm/tm_common.sh
     LVMRC=/etc/one/tm/gfs2clvmrc
@@ -40,26 +41,27 @@ DST_DIR=`dirname $DST_PATH`
 
 MKFS_CMD=`mkfs_command $DST_PATH $FSTYPE`
 
-#------------------------------------------------------------------------------
-#Determine Volume Group and Destination
-#------------------------------------------------------------------------------
+
+###############################################################################
+# Determine Volume Group and Destination
+###############################################################################
+
 VIRTUALID=$(echo $DST_PATH | cut -f7 -d"/")
 VG_NAME=$(onevm show ${VIRTUALID} | grep "DATASTORE=" | cut -f2 -d'"')
 DSTHASH=$(echo -n $DST_PATH | md5sum | awk '{print $1}')
 LV_NAME=lv-one-$DSTHASH
 
-#------------------------------------------------------------------------------
-#Executing image creation
-#------------------------------------------------------------------------------
+
+###############################################################################
+# Executing Image creation
+###############################################################################
+
 log "Creating LV $LV_NAME"
 exec_and_log "$SSH $DST_HOST $SUDO $LVCREATE -L$SIZE -n $LV_NAME $VG_NAME"
 exec_and_log "$SSH $DST_HOST mkdir -p $DST_DIR"
 exec_and_log "$SSH $DST_HOST ln -s /dev/$VG_NAME/$LV_NAME $DST_PATH"
-#exec_and_log "$SSH $DST_HOST chown oneadmin: $DST_PATH"
 
 log "Dumping Image"
-#exec_and_log "eval $SSH $DST_HOST $DD if=/dev/zero of=/dev/$VG_NAME/$LV_NAME bs=64k"
 
-# mkfs is not in PATH, so override with full path specified
+## 'MKFS' is not in PATH, so override with full path specified
 exec_and_log "$SSH $DST_HOST ${MKFS_CMD/mkfs//sbin/mkfs}"
-
