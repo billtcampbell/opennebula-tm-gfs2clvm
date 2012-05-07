@@ -1,7 +1,3 @@
 oneadmin ALL=(root)		NOPASSWD:/bin/cp
 oneadmin ALL=(root)		NOPASSWD:/bin/chmod
 oneadmin ALL=(root)		NOPASSWD:/bin/chown
-
-
-If on CentOS, DISABLE requiretty
-
